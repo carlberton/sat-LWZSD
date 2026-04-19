@@ -1,0 +1,11 @@
+absl-py==2.4.0
+immutabledict==4.3.1
+numpy==2.4.4
+ortools==9.15.6755
+pandas==3.0.2
+protobuf==6.33.6
+pypblib==0.0.4
+python-dateutil==2.9.0.post0
+python-sat==1.9.dev2
+six==1.17.0
+typing_extensions==4.15.0

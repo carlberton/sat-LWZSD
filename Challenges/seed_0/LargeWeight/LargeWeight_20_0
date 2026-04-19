@@ -1,0 +1,18 @@
+# n
+20
+# seed
+0
+# k
+7
+# w
+19
+# H^transpose (each line corresponds to a column of H, the identity part is omitted)
+1101211111202
+0100212220102
+0211201112202
+1121020021222
+0211021200200
+0210012101212
+0212022211021
+# s^transpose
+1201000022110
