@@ -26,6 +26,12 @@ pip install -r requirements.txt
 python3 largeweight_generate.py ${n} ${s}
 ```
 
+For our experimental evaluation, we used the following 20 seeds to ensure statistical relevance:
+
+9328, 34710, 67816, 9853, 0, 221, 45678, 70125, 1, 24497, 48739, 82654, 11457, 27189, 5621, 88881, 15, 27483, 63902, 91806.
+
+For convenience, the /Challenges directory contains pre-generated CNF instances for seed 0, using the CardNetwork and BinMerge encodings.
+
 2. Generate CNF models
 
 Transform the generated instances into SAT models (CNF) using different encoding variants and filtering techniques.
