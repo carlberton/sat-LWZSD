@@ -166,7 +166,7 @@ def build_CNF2(n, w, k, H_transpose, s_transpose, cc_encoding, pb_encoding, Z=3)
     return cnf
 
 
-# Filtrage exhaustif 
+# Exhaustive filtering
 def build_CNF3(n, w, k, H_transpose, s_transpose, cc_encoding, pb_encoding, Z=3):
     m = n - k  # Number of equations
     cnf = CNF()
@@ -257,7 +257,7 @@ def build_CNF3(n, w, k, H_transpose, s_transpose, cc_encoding, pb_encoding, Z=3)
     return cnf
 
 
-# Filtrage compact
+# Compact filtering
 def build_CNF4(n, w, k, H_transpose, s_transpose, cc_encoding, pb_encoding, forward, equiv, Z=3):
     m = n - k  # Number of equations
     cnf = CNF()

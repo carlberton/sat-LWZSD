@@ -10,7 +10,7 @@ def parse_input_file(file_name):
     with open(file_name, 'r') as f:
         lines = [line.strip() for line in f if line.strip()]
 
-    # On identifie les indices des sections
+    # The indices of the sections are identified.
     idx_n = lines.index("# n")
     idx_seed = lines.index("# seed")
     idx_k = lines.index("# k")
@@ -28,7 +28,7 @@ def parse_input_file(file_name):
     w = int(lines[idx_w + 1])
     print(f"w = {w}")
 
-    # Toutes les lignes entre H^T et s^T
+    # All lines between H^T and s^T
     H_transpose = lines[idx_Ht + 1 : idx_s]
 
     # Transposition 
@@ -50,7 +50,7 @@ def build_var_sets(H_transpose, s_transpose, n, k, t, z=3):
     Construct the sets V and K.
     """
 
-    m = n - k   # nombre d'équations
+    m = n - k   # number of equations
     
     # Build V_{E_i} sets for each equation
     V = []
@@ -65,33 +65,33 @@ def build_var_sets(H_transpose, s_transpose, n, k, t, z=3):
     K = []
     for i in range(m):
         s_i = int(s_transpose[i])
-        # Récupérer les coefficients non nuls de l'équation E_i
+        # Retrieve the non-zero coefficients of equation E_i
         coeffs = []
         for j in V[i]:
             if j <= m:
-                # Partie identité
+                # Identity part
                 H_ij = 1
             else:
-                # Partie H_transpose
+                # Part H_transpose
                 col = j - m - 1
                 H_ij = int(H_transpose[i][col])
 
             assert H_ij != 0
             coeffs.append(H_ij)
 
-        # Nombre minimal de variables non nulles dans E_i
-        min_nonzero = max(0, len(V[i]) - (n - t))  # borne locale >= 0
+        # Minimum number of non-zero variables in E_i
+        min_nonzero = max(0, len(V[i]) - (n - t))  # local bound >= 0
 
-        # Trier les coefficients pour construire la borne inférieure
+        # Sort the coefficients to construct the lower bound
         coeffs_sorted = sorted(coeffs)
-        v_min = sum(coeffs_sorted[:min_nonzero])  # somme des plus petits coefficients
+        v_min = sum(coeffs_sorted[:min_nonzero])  # sum of the smallest coefficients
         while v_min % z != s_i:
-            v_min += 1  # ajuster pour respecter la congruence mod z
-        v_max = (z - 1) * sum(coeffs)             # borne sup. inchangée
+            v_min += 1  # adjust to maintain congruence mod z
+        v_max = (z - 1) * sum(coeffs)             # upper limit unchanged
         while v_max % z != s_i:
-            v_max -= 1 # ajuster pour respecter la congruence mod z
+            v_max -= 1 # adjust to maintain congruence mod z
 
-        # Construire l’ensemble K_{E_i} en tenant compte de la borne inférieure
+        # Construct the set K_{E_i} taking into account the lower bound
         K_i = K_i = list(range(v_min, v_max + 1, z))
         K.append(K_i)
 
@@ -117,10 +117,10 @@ def write_cnf_to_file(input_file, cc_encoding, pb_encoding, cnf, seed, variant):
 
 def extract_LW_n(filename):
     """
-    Extrait le nombre 'n' des fichiers "LargeWeight_n_seed"
-    Exemple : "LargeWeight_130_5" -> 130
+    Extracts the number 'n' from the "LargeWeight_n_seed" files"
+    Example : "LargeWeight_130_5" -> 130
     """
-    # On cherche "LargeWeight_" suivi par un ou plusieurs chiffres
+    # We are looking for "LargeWeight_" followed by one or more numbers
     match = re.search(r"LargeWeight_(\d+)", filename)
     if match:
         return int(match.group(1))

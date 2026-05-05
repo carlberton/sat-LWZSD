@@ -23,9 +23,9 @@ def main(n, seed):
     k = math.floor(R*n)
     random.seed(seed)
 
-    # Nouveau chemin avec seed
+    # New path with seed
     prefix = os.path.join(os.getcwd(), f"Challenges/seed_{seed}/LargeWeight/")
-    os.makedirs(prefix, exist_ok=True)  # créer les dossiers si nécessaire
+    os.makedirs(prefix, exist_ok=True)  # Create the folders if necessary.
 
     text = ""
     text += "# n\n"

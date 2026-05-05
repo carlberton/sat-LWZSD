@@ -10,7 +10,7 @@ from LW3SD_CNF import build_CNF1, build_CNF2, build_CNF3, build_CNF4, build_CNF5
 def main():
     if len(sys.argv) < 7:
         print("Usage: python3 models.py <variant: CNF1 | CNF2 | CNF3 | CNF4 | CNF5> <chemin_instance> <cc_encoding> <pb_encoding> <forward:0|1> <equiv:0|1>")
-        print("Exemple: python3 models.py CNF4 Challenges/LargeWeight/LargeWeight_10_0 3 5 1 0")
+        print("Example: python3 models.py CNF4 Challenges/LargeWeight/LargeWeight_10_0 3 5 1 0")
         sys.exit(1)
 
     variant = sys.argv[1]
@@ -29,7 +29,7 @@ def main():
 
     # Vérification logique
     if equiv and not forward:
-        print("Erreur : equiv nécessite forward")
+        print("Error: equiv requires forward")
         sys.exit(1)
 
     # Parse instance
@@ -60,10 +60,10 @@ def main():
         cnf = build_CNF5(n, w, k, H_transpose, s_transpose, cc_encoding, pb_encoding, Z)
 
     else:
-        print("variant doit être CNF1, CNF2, CNF3, CNF4 ou CNF5")
+        print("Variant must be CNF1, CNF2, CNF3, CNF4 or CNF5")
         sys.exit(1)
 
-    print(f"{variant} construite : {len(cnf.clauses)} clauses, {cnf.nv} variables")
+    print(f"{variant} build : {len(cnf.clauses)} clauses, {cnf.nv} variables")
 
     variant_name = variant + suffix
     write_cnf_to_file(

@@ -8,16 +8,15 @@ def build_and_solve_CP1(n, w, k, H_transpose, s_transpose, Z=3, forward=False, e
     model = cp_model.CpModel()
     m = n - k
 
-    # Variables d'erreur e_{j,c} 
-    # e_vars[(j, c)] correspond à e_{j,c} dans le modèle
-    # j de 1 à n, c de 1 à Z-1
+    # Error variables e_{j,c}
+    # e_vars[(j, c)] corresponds to e_{j,c} in the model
+    # j from 1 to n, c from 1 to Z-1
     e_vars = {}
     for j in range(1, n + 1):
         for c in range(1, Z):
             e_vars[(j, c)] = model.NewBoolVar(f"e_{j}_{c}")
 
-    # Chaîne d'implication (Unary encoding) 
-    # -e_{j,v} V e_{j,v-1}  <=>  e_{j,v} => e_{j,v-1}
+    # Chain of implication (Unary encoding)
     for j in range(1, n + 1):
         for v in range(2, Z):
             model.AddImplication(e_vars[(j, v)], e_vars[(j, v-1)])
@@ -25,20 +24,20 @@ def build_and_solve_CP1(n, w, k, H_transpose, s_transpose, Z=3, forward=False, e
     # Build sets V and K
     V, K = build_var_sets(H_transpose, s_transpose, n, k, w, Z)
 
-    # Pour chaque équation E_i
+    # For each equation E_i
     for i in range(m):
-        # On ne crée plus que les variables x_{i,v}
+        # We only create the variables x_{i,v}
         x_vars_dict = {}
         for v in K[i]:
             x_vars_dict[v] = model.NewBoolVar(f"x_{i}_{v}")
 
-        # Exactement une variable x_{i,v} est à 1
+        # Exactly one variable x_{i,v} is at 1
         model.AddExactlyOne(x_vars_dict.values())
 
-        # Équation Pseudo-Booléenne
+        # Pseudo-Boolean Equation
         lhs_terms = []
         
-        # Partie Erreurs : H_ij * e_{j,c}
+        # Error section: H_ij * e_{j,c}
         for j_idx in V[i]:
             if j_idx <= m:
                 H_ij = 1
@@ -50,7 +49,7 @@ def build_and_solve_CP1(n, w, k, H_transpose, s_transpose, Z=3, forward=False, e
                 for c in range(1, Z):
                     lhs_terms.append(e_vars[(j_idx, c)] * H_ij)
 
-        # Partie Auxiliaire : v * Not(x_{i,v})
+        # Auxiliary Part: v * Not(x_{i,v})
         for v, xv in x_vars_dict.items():
             if v != 0:
                 lhs_terms.append(xv.Not() * int(v))
@@ -58,11 +57,11 @@ def build_and_solve_CP1(n, w, k, H_transpose, s_transpose, Z=3, forward=False, e
         rhs = sum(int(v) for v in K[i])
         model.Add(sum(lhs_terms) == rhs)
 
-    # Poids de Hamming 
+    # Hamming weight
     t = w 
     model.Add(sum(e_vars[(j, 1)] for j in range(1, n + 1)) >= t)
 
-    # Résolution
+    # Resolution
     solver = cp_model.CpSolver()
     solver.parameters.max_time_in_seconds = timeout
     
@@ -73,8 +72,8 @@ def build_and_solve_CP1(n, w, k, H_transpose, s_transpose, Z=3, forward=False, e
     solution = None
     if status == cp_model.FEASIBLE or status == cp_model.OPTIMAL:
         status_str = 'sat'
-        # On reconstruit la valeur de l'erreur pour chaque j
-        # La valeur de e_j est la somme des e_{j,c}
+        # We reconstruct the error value for each j
+        # The value of e_j is the sum of e_{j,c}
         sol_list = []
         for j in range(1, n + 1):
             val_j = sum(solver.Value(e_vars[(j, c)]) for c in range(1, Z))
@@ -92,13 +91,13 @@ def build_and_solve_CP2(n, w, k, H_transpose, s_transpose, Z=3,forward=False, eq
     model = cp_model.CpModel()
     m = n - k
 
-    # Variables d'erreur e_{j,c}
+    # Error variables e_{j,c}
     e_vars = {}
     for j in range(1, n + 1):
         for c in range(1, Z):
             e_vars[(j, c)] = model.NewBoolVar(f"e_{j}_{c}")
 
-    # Chaîne d'implication pour e
+    # Chain of involvement for e
     for j in range(1, n + 1):
         for v in range(2, Z):
             model.AddImplication(e_vars[(j, v)], e_vars[(j, v-1)])
@@ -106,27 +105,26 @@ def build_and_solve_CP2(n, w, k, H_transpose, s_transpose, Z=3,forward=False, eq
     # Build sets V and K
     V, K = build_var_sets(H_transpose, s_transpose, n, k, w, Z)
 
-    # Variables auxiliaires x_{i,v} (Encodage Unaire) 
+    # Auxiliary variables x_{i,v} (Unary Encoding)
     x_vars_dict = {}
     for i in range(m):
         for v in K[i]:
             x_vars_dict[(i, v)] = model.NewBoolVar(f"x_{i}_{v}")
 
-        # Chaîne d'implication pour x (¬x_{i,v} ∨ x_{i,v-Z})
-        # Équivalent à : x_{i,v} => x_{i,v-Z}
+        # Chain of implication for x
         for v in K[i]:
             prev_v = v - Z
             if prev_v in K[i]:
                 model.AddImplication(x_vars_dict[(i, v)], x_vars_dict[(i, prev_v)])
 
-    # Pour chaque équation E_i
+    # For each equation E_i
     for i in range(m):
         v_min = min(K[i])
         v_max = max(K[i])
         
         lhs_terms = []
 
-        # Contribution des erreurs (Double somme j et c)
+        # Contribution of errors
         for j_idx in V[i]:
             if j_idx <= m:
                 H_ij = 1
@@ -138,7 +136,7 @@ def build_and_solve_CP2(n, w, k, H_transpose, s_transpose, Z=3,forward=False, eq
                 for c in range(1, Z):
                     lhs_terms.append(e_vars[(j_idx, c)] * H_ij)
 
-        # Contribution des variables auxiliaires : Z * bar_x_{i,v}
+        # Contribution of auxiliary variables
         for v in K[i]:
             if v == v_min:
                 continue
@@ -148,11 +146,11 @@ def build_and_solve_CP2(n, w, k, H_transpose, s_transpose, Z=3,forward=False, eq
 
         model.Add(sum(lhs_terms) == int(v_max))
 
-    # Poids de Hamming 
+    # Hamming weight
     t = w
     model.Add(sum(e_vars[(j, 1)] for j in range(1, n + 1)) >= t)
 
-    # Résolution
+    # Resolution
     solver = cp_model.CpSolver()
     solver.parameters.max_time_in_seconds = timeout
     
@@ -175,11 +173,12 @@ def build_and_solve_CP2(n, w, k, H_transpose, s_transpose, Z=3,forward=False, eq
 
     return status_str, f"{res_time:.5f}", solution
 
+
 def build_and_solve_CP3(n, w, k, H_transpose, s_transpose, Z=3, forward=False, equiv=False, timeout=3600):
     model = cp_model.CpModel()
     m = n - k
 
-    # Variables d'erreur e_{j,c} 
+    # Error variables e_{j,c}
     e_vars = {}
     for j in range(1, n + 1):
         for c in range(1, Z):
@@ -192,7 +191,7 @@ def build_and_solve_CP3(n, w, k, H_transpose, s_transpose, Z=3, forward=False, e
     # Build sets V and K
     V, K = build_var_sets(H_transpose, s_transpose, n, k, w, Z)
 
-    # Variables auxiliaires x_{i,l} (Représentation binaire du quotient q) 
+    # Auxiliary variables x_{i,l} (Binary representation of the quotient q)
     x_vars_dict = {} 
     for i in range(m):
         v_max = max(K[i])
@@ -201,7 +200,7 @@ def build_and_solve_CP3(n, w, k, H_transpose, s_transpose, Z=3, forward=False, e
         for l in range(L_i):
             x_vars_dict[(i, l)] = model.NewBoolVar(f"x_{i}_{l}")
 
-    # Pour chaque équation E_i
+    # For each equation E_i
     for i in range(m):
         v_max = max(K[i])
         q_max = (v_max - int(s_transpose[i])) // Z
@@ -209,14 +208,14 @@ def build_and_solve_CP3(n, w, k, H_transpose, s_transpose, Z=3, forward=False, e
         
         lhs_terms = []
 
-        # Contribution des erreurs
+        # Contribution of errors
         for j_idx in V[i]:
             H_ij = 1 if j_idx <= m else int(H_transpose[i][j_idx - m - 1])
             if H_ij != 0:
                 for c in range(1, Z):
                     lhs_terms.append(e_vars[(j_idx, c)] * H_ij)
 
-        # Contribution des bits du quotient 
+        # Contribution of the bits of the quotient
         for l in range(L_i):
             xv = x_vars_dict[(i, l)]
             lhs_terms.append(xv.Not() * (Z * (2**l)))
@@ -224,30 +223,30 @@ def build_and_solve_CP3(n, w, k, H_transpose, s_transpose, Z=3, forward=False, e
         rhs = int(s_transpose[i]) + Z * (2**L_i - 1)
         model.Add(sum(lhs_terms) == rhs)
 
-        # Filtrage Exhaustif (Exclusion des valeurs interdites) 
-        # On identifie les valeurs de v (quotient) qui ne sont pas dans K[i]
-        # s_i + Z*v doit être dans K[i]
+        # Exhaustive Filtering (Exclusion of forbidden values)
+        # We identify the values ​​of v (quotient) that are not in K[i]
+        # s_i + Z*v must be in K[i]
         for v in range(2**L_i):
             if (int(s_transpose[i]) + Z * v) not in K[i]:
-                # On ajoute une clause pour interdire la combinaison de bits correspondant à v
-                # La clause doit être vraie si AU MOINS UN bit est différent de la config de v
+                # We add a clause to prohibit the combination of bits corresponding to v
+                # The clause must be true if AT LEAST ONE bit is different from the v configuration
                 forbidden_clause = []
                 for l in range(L_i):
-                    bit = (v >> l) & 1 # Récupère le l-ième bit de v
+                    bit = (v >> l) & 1 # Retrieves the lth bit of v
                     if bit == 0:
-                        # Si le bit de v est 0, on veut que l'un des bits soit 1 (x)
+                        # If the bit of v is 0, we want one of the bits to be 1 (x)
                         forbidden_clause.append(x_vars_dict[(i, l)])
                     else:
-                        # Si le bit de v est 1, on veut que l'un des bits soit 0 (Not(x))
+                        # If the bit of v is 1, we want one of the bits to be 0 (Not(x))
                         forbidden_clause.append(x_vars_dict[(i, l)].Not())
                 
-                # model.AddBoolOr([Lits]) force au moins un littéral à être vrai
+                # model.AddBoolOr([Lits]) forces at least one literal to be true
                 model.AddBoolOr(forbidden_clause)
 
-    # Contrainte de poids de Hamming 
+    # Hamming weight constraint
     model.Add(sum(e_vars[(j, 1)] for j in range(1, n + 1)) >= w)
 
-    # Résolution
+    # Resolution
     solver = cp_model.CpSolver()
     solver.parameters.max_time_in_seconds = timeout
     
@@ -270,21 +269,21 @@ def build_and_solve_CP4(n, w, k, H_transpose, s_transpose, Z=3, forward=False, e
     model = cp_model.CpModel()
     m = n - k
 
-    # Variables d'erreur e_{j,c}
+    # Error variables e_{j,c}
     e_vars = {}
     for j in range(1, n + 1):
         for c in range(1, Z):
             e_vars[(j, c)] = model.NewBoolVar(f"e_{j}_{c}")
 
-    # Encodage unaire 
+    # Unary encoding 
     for j in range(1, n + 1):
         for v in range(2, Z):
             model.AddImplication(e_vars[(j, v)], e_vars[(j, v-1)])
 
-    # Chargement des ensembles V et K via utils
+    # Build sets
     V, K = build_var_sets(H_transpose, s_transpose, n, k, w, Z)
 
-    # Variables auxiliaires x_{i,l} (Bits du quotient)
+    # Auxiliary variables
     x_vars_dict = {}
     for i in range(m):
         v_max = max(K[i])
@@ -293,14 +292,14 @@ def build_and_solve_CP4(n, w, k, H_transpose, s_transpose, Z=3, forward=False, e
         for l in range(L_i):
             x_vars_dict[(i, l)] = model.NewBoolVar(f"x_{i}_{l}")
 
-    # Pour chaque équation E_i
+    # For each equation E_i
     for i in range(m):
         v_min, v_max = min(K[i]), max(K[i])
         s_i = int(s_transpose[i])
         q_min, q_max = (v_min - s_i) // Z, (v_max - s_i) // Z
         L_i = max(1, q_max.bit_length())
 
-        # Équation Pseudo-Booléenne 
+        # Pseudo-Boolean constraints
         lhs_terms = []
         for j_idx in V[i]:
             H_ij = 1 if j_idx <= m else int(H_transpose[i][j_idx - m - 1])
@@ -314,7 +313,7 @@ def build_and_solve_CP4(n, w, k, H_transpose, s_transpose, Z=3, forward=False, e
         rhs = s_i + Z * (2**L_i - 1)
         model.Add(sum(lhs_terms) == rhs)
 
-        # Filtrage Compact (Bornes q_max / q_min) 
+        # Filtering of forbidden values (Exclusion of q > q_max and q < q_min)
         bits_max = [(q_max >> l) & 1 for l in range(L_i)]
         bits_min = [(q_min >> l) & 1 for l in range(L_i)]
         
@@ -331,7 +330,7 @@ def build_and_solve_CP4(n, w, k, H_transpose, s_transpose, Z=3, forward=False, e
             
             block_pmax = sorted(pmax.keys(), reverse=True)
 
-            # Implication de chaîne et segments
+            # Implication 
             if not forward or equiv:
                 for idx, j in enumerate(block_pmax):
                     p_j = pmax[j]
@@ -347,7 +346,7 @@ def build_and_solve_CP4(n, w, k, H_transpose, s_transpose, Z=3, forward=False, e
                             else:
                                 model.AddImplication(p_j, x_vars_dict[(i, k)].Not())
 
-            # Forward direction: (prefix match) => p_j
+            # Forward clause
             if forward:
                 for idx, j in enumerate(block_pmax):
                     p_j = pmax[j]
@@ -372,7 +371,7 @@ def build_and_solve_CP4(n, w, k, H_transpose, s_transpose, Z=3, forward=False, e
                                 clause.append(xk)
                         model.AddBoolOr(clause)
 
-            # Clauses d'élimination (7a et 7b du modèle mathématique)
+            # Elimination of forbidden values between blocks
             for idx, j in enumerate(block_pmax):
                 p_j = pmax[j]
                 if idx < len(block_pmax) - 1:
@@ -391,7 +390,7 @@ def build_and_solve_CP4(n, w, k, H_transpose, s_transpose, Z=3, forward=False, e
         # Exclusion q < q_min 
         pmin = {}
         if J_min:
-            # (7c) Bits au dessus du MSB à 0
+            # Bits above MSB set to 0
             j_msb0 = J_min[0]
             if j_msb0 != L_i - 1:
                 for k in range(j_msb0 + 1, L_i):
@@ -459,14 +458,14 @@ def build_and_solve_CP4(n, w, k, H_transpose, s_transpose, Z=3, forward=False, e
                     for k in range(last, j):
                         model.AddImplication(p_j, x_vars_dict[(i, k)])
         else:
-            # Si q_min n'a aucun bit à 0 (cas q_min = 2^L - 1)
+            # If q_min has no bits set to 0 (case q_min = 2^L - 1)
             for k in range(L_i):
                 model.Add(x_vars_dict[(i, k)] == 1)
 
-    # Contrainte de Poids de Hamming
+    # Hamming Weight Constraint
     model.Add(sum(e_vars[(j, 1)] for j in range(1, n + 1)) >= w)
 
-    # Résolution 
+    # Resolution 
     solver = cp_model.CpSolver()
     solver.parameters.max_time_in_seconds = timeout
     
@@ -528,7 +527,7 @@ def process_file(file_path, solve_function, forward=False, equiv=False):
 
 
 def main():
-    # Configuration du dictionnaire de méthodes
+    # Method dictionary configuration
     methods = {
         'CNF1': build_and_solve_CP1,
         'CNF2': build_and_solve_CP2,
@@ -536,7 +535,7 @@ def main():
         'CNF4': build_and_solve_CP4
     }
 
-    # Configuration de l'argument parser
+    # Configuring the parser argument
     parser = argparse.ArgumentParser(description="CPSAT solver for syndrome decoding.")
     parser.add_argument('-m', '--method', choices=methods.keys(), required=True, 
                         help="Resolution method to use (CNF1, CNF2, CNF3 or CNF4)")
@@ -561,7 +560,7 @@ def main():
     forward = args.forward
     equiv = args.equiv
 
-    # Déterminer suffixe pour CNF4
+    # Determine suffix for CNF4
     suffix = ""
     if args.method == "CNF4":
         if args.equiv:
@@ -569,15 +568,15 @@ def main():
         elif args.forward:
             suffix = "_forward"
 
-    # Logique des modes
+    # Logic of modes
     if equiv:
         forward = True
 
-    # Sélection de la fonction de résolution
+    # Selecting the resolution function
     solve_function = methods[args.method]
 
     if args.file:
-        # Traitement d'un fichier unique
+        # Processing a single file
         file, status, res_time, sol = process_file(args.file, solve_function, forward=forward, equiv=equiv)
         directory = os.path.dirname(args.file)
         csv_filepath = os.path.join(directory, f"CPSAT_{args.method}{suffix}_{os.path.splitext(file)[0]}.csv")
@@ -588,16 +587,16 @@ def main():
             csv_writer.writerow([file, status, res_time, sol])
             csvfile.flush()
     else:
-        # Traitement d'un répertoire complet
+        # Processing a complete directory
         csv_filepath = os.path.join(args.dir, f"CPSAT_{args.method}{suffix}.csv")
         
-        # On ouvre le fichier CSV en mode append (au cas où tu relances) ou write
+        # Open the CSV file in append mode (in case you need to restart) or write mode.
         with open(csv_filepath, mode='w', newline='') as csvfile:
             csv_writer = csv.writer(csvfile)
             csv_writer.writerow(["File", "Result", "Time (s)", "Solution"])
             csvfile.flush()
 
-            # Lister et filtrer les fichiers d'instances
+            # List and filter instance files
             all_files = os.listdir(args.dir)
             entries = [
                 f for f in all_files 
@@ -606,32 +605,32 @@ def main():
                 and not f.endswith(".csv")
             ]
             
-            # Tri
+            # Sort
             entries.sort(key=extract_LW_n)
 
             if not entries:
-                print(f"Aucun fichier d'instance 'LargeWeight_' trouvé dans : {args.dir}")
+                print(f"No 'LargeWeight_' instance file found in: {args.dir}")
                 return
 
-            print(f"Début du traitement de {len(entries)} fichiers dans l'ordre croissant de n.")
+            print(f"Starting to process {len(entries)} files in ascending order of n.")
 
-            # Boucle de traitement
+            # Processing loop
             for entry in entries:
                 path = os.path.join(args.dir, entry)
                 n_val = extract_LW_n(entry)
                 
-                print(f"\n[n={n_val}] Traitement de : {entry} ...")
+                print(f"\n[n={n_val}] Treatment of: {entry} ...")
                 
-                # Exécution du solver CP-SAT sélectionné
+                # Running the selected CP-SAT solver
                 file_name, status, res_time, sol = process_file(path, solve_function, forward=forward, equiv=equiv)
                 
-                # Écriture immédiate dans le CSV (sécurité si crash)
+                # Immediate writing to the CSV (safety in case of crash)
                 csv_writer.writerow([file_name, status, res_time, sol])
                 csvfile.flush()
                 
-                print(f"Terminé : {status} en {res_time}s")
+                print(f"Completed: {status} in {res_time}s")
 
-    print(f"\nTous les fichiers ont été traités. Résultats : {csv_filepath}")
+    print(f"\nAll files have been processed. Results: {csv_filepath}")
 
 
 if __name__ == "__main__":
