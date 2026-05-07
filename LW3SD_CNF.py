@@ -258,7 +258,7 @@ def build_CNF3(n, w, k, H_transpose, s_transpose, cc_encoding, pb_encoding, Z=3)
 
 
 # Compact filtering
-def build_CNF4(n, w, k, H_transpose, s_transpose, cc_encoding, pb_encoding, forward, equiv, Z=3):
+def build_CNF4(n, w, k, H_transpose, s_transpose, cc_encoding, pb_encoding, forward, backward, Z=3):
     m = n - k  # Number of equations
     cnf = CNF()
 
@@ -350,7 +350,7 @@ def build_CNF4(n, w, k, H_transpose, s_transpose, cc_encoding, pb_encoding, forw
             block_pmax = sorted(pmax.keys(), reverse=True)
 
             # backward
-            if not forward or equiv:
+            if backward:
                 for idx, j in enumerate(block_pmax):
                     p_j = pmax[j]
                     if idx == 0:
@@ -429,7 +429,7 @@ def build_CNF4(n, w, k, H_transpose, s_transpose, cc_encoding, pb_encoding, forw
             block_pmin = sorted(pmin.keys(), reverse=True)
 
             # backward
-            if not forward or equiv:
+            if backward :
                 for idx, j in enumerate(block_pmin):
                     p_j = pmin[j]
                     if idx == 0:

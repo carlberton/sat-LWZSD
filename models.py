@@ -9,8 +9,8 @@ from LW3SD_CNF import build_CNF1, build_CNF2, build_CNF3, build_CNF4, build_CNF5
 
 def main():
     if len(sys.argv) < 7:
-        print("Usage: python3 models.py <variant: CNF1 | CNF2 | CNF3 | CNF4 | CNF5> <chemin_instance> <cc_encoding> <pb_encoding> <forward:0|1> <equiv:0|1>")
-        print("Example: python3 models.py CNF4 Challenges/LargeWeight/LargeWeight_10_0 3 5 1 0")
+        print("Usage: python3 models.py <variant: CNF1 | CNF2 | CNF3 | CNF4 | CNF5> <chemin_instance> <cc_encoding> <pb_encoding> <forward:0|1> <backward:0|1>")
+        print(print("Example: python3 models.py CNF4 Challenges/LargeWeight/LargeWeight_10_0 3 5 1 1"))
         sys.exit(1)
 
     variant = sys.argv[1]
@@ -18,19 +18,18 @@ def main():
     cc_encoding = int(sys.argv[3])
     pb_encoding = int(sys.argv[4])
     forward = bool(int(sys.argv[5]))
-    equiv = bool(int(sys.argv[6]))
+    backward = bool(int(sys.argv[6]))
     suffix = ""
     if variant == "CNF4":
-        if equiv:
+        if forward and backward:
             suffix = "_equiv"
         elif forward:
             suffix = "_forward"
+        elif backward:
+            suffix = "_backward"
+        else:
+            suffix = "_none"
     Z = 3
-
-    # Vérification logique
-    if equiv and not forward:
-        print("Error: equiv requires forward")
-        sys.exit(1)
 
     # Parse instance
     n, seed, w, k, H_transpose, s_transpose = parse_input_file(input_file)
@@ -52,7 +51,7 @@ def main():
             cc_encoding,
             pb_encoding,
             forward,
-            equiv,
+            backward,
             Z
         )
 

@@ -4,7 +4,7 @@ import argparse
 from ortools.sat.python import cp_model
 from utils import *
 
-def build_and_solve_CP1(n, w, k, H_transpose, s_transpose, Z=3, forward=False, equiv=False, timeout=3600):
+def build_and_solve_CP1(n, w, k, H_transpose, s_transpose, Z=3, forward=False, backward=False, timeout=3600):
     model = cp_model.CpModel()
     m = n - k
 
@@ -87,7 +87,7 @@ def build_and_solve_CP1(n, w, k, H_transpose, s_transpose, Z=3, forward=False, e
     return status_str, f"{res_time:.5f}", solution
 
 
-def build_and_solve_CP2(n, w, k, H_transpose, s_transpose, Z=3,forward=False, equiv=False, timeout=3600):
+def build_and_solve_CP2(n, w, k, H_transpose, s_transpose, Z=3,forward=False, backward=False, timeout=3600):
     model = cp_model.CpModel()
     m = n - k
 
@@ -174,7 +174,7 @@ def build_and_solve_CP2(n, w, k, H_transpose, s_transpose, Z=3,forward=False, eq
     return status_str, f"{res_time:.5f}", solution
 
 
-def build_and_solve_CP3(n, w, k, H_transpose, s_transpose, Z=3, forward=False, equiv=False, timeout=3600):
+def build_and_solve_CP3(n, w, k, H_transpose, s_transpose, Z=3, forward=False, backward=False, timeout=3600):
     model = cp_model.CpModel()
     m = n - k
 
@@ -265,7 +265,7 @@ def build_and_solve_CP3(n, w, k, H_transpose, s_transpose, Z=3, forward=False, e
     return status_str, f"{res_time:.5f}", solution
 
 
-def build_and_solve_CP4(n, w, k, H_transpose, s_transpose, Z=3, forward=False, equiv=False, timeout=3600):
+def build_and_solve_CP4(n, w, k, H_transpose, s_transpose, Z=3, forward=False, backward=True, timeout=3600):
     model = cp_model.CpModel()
     m = n - k
 
@@ -331,7 +331,7 @@ def build_and_solve_CP4(n, w, k, H_transpose, s_transpose, Z=3, forward=False, e
             block_pmax = sorted(pmax.keys(), reverse=True)
 
             # Implication 
-            if not forward or equiv:
+            if backward:
                 for idx, j in enumerate(block_pmax):
                     p_j = pmax[j]
                     if idx == 0:
@@ -402,7 +402,7 @@ def build_and_solve_CP4(n, w, k, H_transpose, s_transpose, Z=3, forward=False, e
             
             block_pmin = sorted(pmin.keys(), reverse=True)
 
-            if not forward or equiv:
+            if backward:
                 for idx, j in enumerate(block_pmin):
                     p_j = pmin[j]
                     if idx == 0:
@@ -486,7 +486,7 @@ def build_and_solve_CP4(n, w, k, H_transpose, s_transpose, Z=3, forward=False, e
     return status_str, f"{res_time:.5f}", solution
 
 
-def process_file(file_path, solve_function, forward=False, equiv=False):
+def process_file(file_path, solve_function, forward=False, backward=True):
     """
     Process a single input file and solve the syndrome decoding problem.
 
@@ -494,7 +494,7 @@ def process_file(file_path, solve_function, forward=False, equiv=False):
         file_path (str): Path to the input file containing problem parameters.
         solve_function (function): Function to solve the problem.
         forward (bool): Use forward filtering.
-        equiv (bool): Use equivalence filtering.
+        backward (bool): Use backward filtering.
     
     Returns:
         tuple: (file, status, res_time, sol)
@@ -509,7 +509,7 @@ def process_file(file_path, solve_function, forward=False, equiv=False):
         s_transpose,
         Z=3,
         forward=forward,
-        equiv=equiv
+        backward=backward
     )
     
     file = os.path.basename(file_path)
@@ -547,9 +547,9 @@ def main():
     )
 
     parser.add_argument(
-        "--equiv",
+        "--backward",
         action="store_true",
-        help="Use equivalence (forward + backward)"
+        help="Use backward implication"
     )
     
     group = parser.add_mutually_exclusive_group(required=True)
@@ -558,26 +558,26 @@ def main():
     args = parser.parse_args()
 
     forward = args.forward
-    equiv = args.equiv
+    backward = args.backward
 
     # Determine suffix for CNF4
     suffix = ""
     if args.method == "CNF4":
-        if args.equiv:
+        if forward and backward:
             suffix = "_equiv"
-        elif args.forward:
+        elif forward:
             suffix = "_forward"
-
-    # Logic of modes
-    if equiv:
-        forward = True
+        elif backward:
+            suffix = "_backward"
+        else:
+            suffix = "_none"
 
     # Selecting the resolution function
     solve_function = methods[args.method]
 
     if args.file:
         # Processing a single file
-        file, status, res_time, sol = process_file(args.file, solve_function, forward=forward, equiv=equiv)
+        file, status, res_time, sol = process_file(args.file, solve_function, forward=forward, backward=backward)
         directory = os.path.dirname(args.file)
         csv_filepath = os.path.join(directory, f"CPSAT_{args.method}{suffix}_{os.path.splitext(file)[0]}.csv")
         
@@ -622,7 +622,7 @@ def main():
                 print(f"\n[n={n_val}] Treatment of: {entry} ...")
                 
                 # Running the selected CP-SAT solver
-                file_name, status, res_time, sol = process_file(path, solve_function, forward=forward, equiv=equiv)
+                file_name, status, res_time, sol = process_file(path, solve_function, forward=forward, backward=backward)
                 
                 # Immediate writing to the CSV (safety in case of crash)
                 csv_writer.writerow([file_name, status, res_time, sol])
