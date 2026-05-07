@@ -265,7 +265,7 @@ def build_and_solve_CP3(n, w, k, H_transpose, s_transpose, Z=3, forward=False, b
     return status_str, f"{res_time:.5f}", solution
 
 
-def build_and_solve_CP4(n, w, k, H_transpose, s_transpose, Z=3, forward=False, backward=True, timeout=3600):
+def build_and_solve_CP4(n, w, k, H_transpose, s_transpose, Z=3, forward=False, backward=False, timeout=3600):
     model = cp_model.CpModel()
     m = n - k
 
