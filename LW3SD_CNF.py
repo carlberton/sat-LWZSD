@@ -166,8 +166,83 @@ def build_CNF2(n, w, k, H_transpose, s_transpose, cc_encoding, pb_encoding, Z=3)
     return cnf
 
 
-# Exhaustive filtering
+# 0 Filtrage 
 def build_CNF3(n, w, k, H_transpose, s_transpose, cc_encoding, pb_encoding, Z=3):
+    m = n - k  # Number of equations
+    cnf = CNF()
+
+    top_id = 0  # Highest variable index so far
+    # Assign unique variable ids to error variables e_{j,c}
+    e_var = {}
+    for j in range(1, n+1):
+        for c in range(1, Z):
+            top_id += 1
+            e_var[(j, c)] = top_id
+
+    # -e_{j,v} V e_{j,v-1}
+    for j in range(1, n+1):
+        for c in range(2, Z):
+            cnf.append([
+                -e_var[(j, c)],
+                e_var[(j, c-1)]
+            ])
+
+    # Build sets V and K
+    V , K = build_var_sets(H_transpose, s_transpose, n, k, w, Z)
+
+    # Introduce auxiliary variables x_{i,l} for binary representation
+    x_vars_dict = {}  
+    for i in range(m):
+        v_max = max(K[i]) # maximum value in K_i
+        q_max = (v_max - int(s_transpose[i])) // Z # max quotient
+        L_i = max(1, q_max.bit_length())  # Number of bits needed
+        for l in range(L_i):
+            top_id += 1
+            x_vars_dict[(i, l)] = top_id
+
+
+    # Encode the pseudo-Boolean equality constraints for each equation E_i
+    for i in range(m):
+        lits = []
+        weights = []
+
+        # contribution from e_{j,c}
+        for j in V[i]:
+            if j <= m:
+                H_ij = 1
+            else:
+                col = j - m - 1
+                H_ij = int(H_transpose[i][col])
+            for c in range(1, Z):
+                lits.append(e_var[(j, c)])
+                weights.append(H_ij)
+
+        # contribution from x_{i,l}
+        v_max = max(K[i])
+        q_max = (v_max - int(s_transpose[i])) // Z
+        L_i = max(1, q_max.bit_length())
+        for l in range(L_i):
+            xv = x_vars_dict[(i,l)]
+            lits.append(-xv) 
+            weights.append(Z * 2**l)
+
+        rhs = int(s_transpose[i]) + Z * (2**L_i - 1) 
+
+        res = PBEnc.equals(lits=lits, weights=weights, bound=rhs, top_id=top_id, encoding=pb_encoding)
+        cnf.extend(res.clauses)
+        top_id = res.nv
+
+    # Encode the constraint on the total Hamming weight of e 
+    nonzero_lits = [e_var[(j,1)] for j in range(1, n+1)]
+    if nonzero_lits:
+        res_w = CardEnc.atleast(lits=nonzero_lits, bound=w, top_id=top_id, encoding=cc_encoding)
+        cnf.extend(res_w.clauses)
+
+    return cnf
+
+
+# Exhaustive filtering
+def build_CNF3_Exhaustive(n, w, k, H_transpose, s_transpose, cc_encoding, pb_encoding, Z=3):
     m = n - k  # Number of equations
     cnf = CNF()
 
@@ -258,7 +333,7 @@ def build_CNF3(n, w, k, H_transpose, s_transpose, cc_encoding, pb_encoding, Z=3)
 
 
 # Compact filtering
-def build_CNF4(n, w, k, H_transpose, s_transpose, cc_encoding, pb_encoding, forward, backward, Z=3):
+def build_CNF3_Compact(n, w, k, H_transpose, s_transpose, cc_encoding, pb_encoding, Z=3):
     m = n - k  # Number of equations
     cnf = CNF()
 
@@ -349,51 +424,49 @@ def build_CNF4(n, w, k, H_transpose, s_transpose, cc_encoding, pb_encoding, forw
 
             block_pmax = sorted(pmax.keys(), reverse=True)
 
-            # backward
-            if backward:
-                for idx, j in enumerate(block_pmax):
-                    p_j = pmax[j]
-                    if idx == 0:
-                        # p_j => all bits from j to L_i-1 match q_max
-                        for kk in range(j, L_i):
-                            cnf.append([-p_j, x_vars_dict[(i, kk)]])
-                    else:
-                        j_prime = block_pmax[idx - 1]
-                        p_jp = pmax[j_prime]
-                        cnf.append([-p_j, p_jp])
-                        for kk in range(j, j_prime):
-                            xk = x_vars_dict[(i, kk)]
-                            if bits_max[kk] == 1:
-                                cnf.append([-p_j, xk])
-                            else:
-                                cnf.append([-p_j, -xk])
+            # backward:
+            for idx, j in enumerate(block_pmax):
+                p_j = pmax[j]
+                if idx == 0:
+                    # p_j => all bits from j to L_i-1 match q_max
+                    for kk in range(j, L_i):
+                        cnf.append([-p_j, x_vars_dict[(i, kk)]])
+                else:
+                    j_prime = block_pmax[idx - 1]
+                    p_jp = pmax[j_prime]
+                    cnf.append([-p_j, p_jp])
+                    for kk in range(j, j_prime):
+                        xk = x_vars_dict[(i, kk)]
+                        if bits_max[kk] == 1:
+                            cnf.append([-p_j, xk])
+                        else:
+                            cnf.append([-p_j, -xk])
 
             # forward
-            if forward:
-                for idx, j in enumerate(block_pmax):
-                    p_j = pmax[j]
-                    if idx == 0:
-                        # (all bits from j to L_i-1 match q_max) => p_j
-                        clause = [p_j]
-                        for kk in range(j, L_i):
-                            xk = x_vars_dict[(i, kk)]
-                            if bits_max[kk] == 1:
-                                clause.append(-xk)   # differs if x_k = 0
-                            else:
-                                clause.append(xk)    # differs if x_k = 1
-                        cnf.append(clause)
-                    else:
-                        j_prime = block_pmax[idx - 1]
-                        p_jp = pmax[j_prime]
-                        # (p_{j'} AND bits in [j, j'-1] match q_max) => p_j
-                        clause = [p_j, -p_jp]
-                        for kk in range(j, j_prime):
-                            xk = x_vars_dict[(i, kk)]
-                            if bits_max[kk] == 1:
-                                clause.append(-xk)
-                            else:
-                                clause.append(xk)
-                        cnf.append(clause)
+            for idx, j in enumerate(block_pmax):
+                p_j = pmax[j]
+                if idx == 0:
+                    # (all bits from j to L_i-1 match q_max) => p_j
+                    clause = [p_j]
+                    for kk in range(j, L_i):
+                        xk = x_vars_dict[(i, kk)]
+                        if bits_max[kk] == 1:
+                            clause.append(-xk)   # differs if x_k = 0
+                        else:
+                            clause.append(xk)    # differs if x_k = 1
+                    cnf.append(clause)
+                else:
+                    j_prime = block_pmax[idx - 1]
+                    p_jp = pmax[j_prime]
+                    # (p_{j'} AND bits in [j, j'-1] match q_max) => p_j
+                    clause = [p_j, -p_jp]
+                    for kk in range(j, j_prime):
+                        xk = x_vars_dict[(i, kk)]
+                        if bits_max[kk] == 1:
+                            clause.append(-xk)
+                        else:
+                            clause.append(xk)
+                    cnf.append(clause)
 
             # Forbidding clauses (same structure, now triggered by p_j=True)
             for idx, j in enumerate(block_pmax):
@@ -429,53 +502,51 @@ def build_CNF4(n, w, k, H_transpose, s_transpose, cc_encoding, pb_encoding, forw
             block_pmin = sorted(pmin.keys(), reverse=True)
 
             # backward
-            if backward :
-                for idx, j in enumerate(block_pmin):
-                    p_j = pmin[j]
-                    if idx == 0:
-                        for kk in range(j, L_i):
-                            xk = x_vars_dict[(i, kk)]
-                            if bits_min[kk] == 0:
-                                cnf.append([-p_j, -xk])
-                            else:
-                                cnf.append([-p_j, xk])
-                    else:
-                        j_prime = block_pmin[idx - 1]
-                        p_jp = pmin[j_prime]
-                        cnf.append([-p_j, p_jp])
-                        for kk in range(j, j_prime):
-                            xk = x_vars_dict[(i, kk)]
-                            if bits_min[kk] == 0:
-                                cnf.append([-p_j, -xk])
-                            else:
-                                cnf.append([-p_j, xk])
+            for idx, j in enumerate(block_pmin):
+                p_j = pmin[j]
+                if idx == 0:
+                    for kk in range(j, L_i):
+                        xk = x_vars_dict[(i, kk)]
+                        if bits_min[kk] == 0:
+                            cnf.append([-p_j, -xk])
+                        else:
+                            cnf.append([-p_j, xk])
+                else:
+                    j_prime = block_pmin[idx - 1]
+                    p_jp = pmin[j_prime]
+                    cnf.append([-p_j, p_jp])
+                    for kk in range(j, j_prime):
+                        xk = x_vars_dict[(i, kk)]
+                        if bits_min[kk] == 0:
+                            cnf.append([-p_j, -xk])
+                        else:
+                            cnf.append([-p_j, xk])
 
             # forward
-            if forward:
-                for idx, j in enumerate(block_pmin):
-                    p_j = pmin[j]
-                    if idx == 0:
-                        # (bits from j to L_i-1 match q_min) => p_j
-                        clause = [p_j]
-                        for kk in range(j, L_i):
-                            xk = x_vars_dict[(i, kk)]
-                            if bits_min[kk] == 0:
-                                clause.append(xk)    # differs if x_k = 1
-                            else:
-                                clause.append(-xk)   # differs if x_k = 0
-                        cnf.append(clause)
-                    else:
-                        j_prime = block_pmin[idx - 1]
-                        p_jp = pmin[j_prime]
-                        # (p_{j'} AND bits in [j, j'-1] match q_min) => p_j
-                        clause = [p_j, -p_jp]
-                        for kk in range(j, j_prime):
-                            xk = x_vars_dict[(i, kk)]
-                            if bits_min[kk] == 0:
-                                clause.append(xk)
-                            else:
-                                clause.append(-xk)
-                        cnf.append(clause)
+            for idx, j in enumerate(block_pmin):
+                p_j = pmin[j]
+                if idx == 0:
+                    # (bits from j to L_i-1 match q_min) => p_j
+                    clause = [p_j]
+                    for kk in range(j, L_i):
+                        xk = x_vars_dict[(i, kk)]
+                        if bits_min[kk] == 0:
+                            clause.append(xk)    # differs if x_k = 1
+                        else:
+                            clause.append(-xk)   # differs if x_k = 0
+                    cnf.append(clause)
+                else:
+                    j_prime = block_pmin[idx - 1]
+                    p_jp = pmin[j_prime]
+                    # (p_{j'} AND bits in [j, j'-1] match q_min) => p_j
+                    clause = [p_j, -p_jp]
+                    for kk in range(j, j_prime):
+                        xk = x_vars_dict[(i, kk)]
+                        if bits_min[kk] == 0:
+                            clause.append(xk)
+                        else:
+                            clause.append(-xk)
+                    cnf.append(clause)
 
             for idx, j in enumerate(block_pmin):
                 p_j = pmin[j]
@@ -497,80 +568,6 @@ def build_CNF4(n, w, k, H_transpose, s_transpose, cc_encoding, pb_encoding, forw
             # All bits of q_min are 1: force all x bits to 1
             for kk, b in enumerate(bits_min):
                 cnf.append([x_vars_dict[(i, kk)]])
-
-    # Encode the constraint on the total Hamming weight of e 
-    nonzero_lits = [e_var[(j,1)] for j in range(1, n+1)]
-    if nonzero_lits:
-        res_w = CardEnc.atleast(lits=nonzero_lits, bound=w, top_id=top_id, encoding=cc_encoding)
-        cnf.extend(res_w.clauses)
-
-    return cnf
-
-# 0 Filtrage 
-def build_CNF5(n, w, k, H_transpose, s_transpose, cc_encoding, pb_encoding, Z=3):
-    m = n - k  # Number of equations
-    cnf = CNF()
-
-    top_id = 0  # Highest variable index so far
-    # Assign unique variable ids to error variables e_{j,c}
-    e_var = {}
-    for j in range(1, n+1):
-        for c in range(1, Z):
-            top_id += 1
-            e_var[(j, c)] = top_id
-
-    # -e_{j,v} V e_{j,v-1}
-    for j in range(1, n+1):
-        for c in range(2, Z):
-            cnf.append([
-                -e_var[(j, c)],
-                e_var[(j, c-1)]
-            ])
-
-    # Build sets V and K
-    V , K = build_var_sets(H_transpose, s_transpose, n, k, w, Z)
-
-    # Introduce auxiliary variables x_{i,l} for binary representation
-    x_vars_dict = {}  
-    for i in range(m):
-        v_max = max(K[i]) # maximum value in K_i
-        q_max = (v_max - int(s_transpose[i])) // Z # max quotient
-        L_i = max(1, q_max.bit_length())  # Number of bits needed
-        for l in range(L_i):
-            top_id += 1
-            x_vars_dict[(i, l)] = top_id
-
-
-    # Encode the pseudo-Boolean equality constraints for each equation E_i
-    for i in range(m):
-        lits = []
-        weights = []
-
-        # contribution from e_{j,c}
-        for j in V[i]:
-            if j <= m:
-                H_ij = 1
-            else:
-                col = j - m - 1
-                H_ij = int(H_transpose[i][col])
-            for c in range(1, Z):
-                lits.append(e_var[(j, c)])
-                weights.append(H_ij)
-
-        # contribution from x_{i,l}
-        v_max = max(K[i])
-        q_max = (v_max - int(s_transpose[i])) // Z
-        L_i = max(1, q_max.bit_length())
-        for l in range(L_i):
-            xv = x_vars_dict[(i,l)]
-            lits.append(-xv) 
-            weights.append(Z * 2**l)
-
-        rhs = int(s_transpose[i]) + Z * (2**L_i - 1) 
-
-        res = PBEnc.equals(lits=lits, weights=weights, bound=rhs, top_id=top_id, encoding=pb_encoding)
-        cnf.extend(res.clauses)
-        top_id = res.nv
 
     # Encode the constraint on the total Hamming weight of e 
     nonzero_lits = [e_var[(j,1)] for j in range(1, n+1)]

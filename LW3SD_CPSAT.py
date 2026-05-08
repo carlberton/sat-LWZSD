@@ -4,7 +4,7 @@ import argparse
 from ortools.sat.python import cp_model
 from utils import *
 
-def build_and_solve_CP1(n, w, k, H_transpose, s_transpose, Z=3, forward=False, backward=False, timeout=3600):
+def build_and_solve_CP1(n, w, k, H_transpose, s_transpose, Z=3, timeout=3600):
     model = cp_model.CpModel()
     m = n - k
 
@@ -87,7 +87,7 @@ def build_and_solve_CP1(n, w, k, H_transpose, s_transpose, Z=3, forward=False, b
     return status_str, f"{res_time:.5f}", solution
 
 
-def build_and_solve_CP2(n, w, k, H_transpose, s_transpose, Z=3,forward=False, backward=False, timeout=3600):
+def build_and_solve_CP2(n, w, k, H_transpose, s_transpose, Z=3, timeout=3600):
     model = cp_model.CpModel()
     m = n - k
 
@@ -174,7 +174,78 @@ def build_and_solve_CP2(n, w, k, H_transpose, s_transpose, Z=3,forward=False, ba
     return status_str, f"{res_time:.5f}", solution
 
 
-def build_and_solve_CP3(n, w, k, H_transpose, s_transpose, Z=3, forward=False, backward=False, timeout=3600):
+def build_and_solve_CP3(n, w, k, H_transpose, s_transpose, Z=3, timeout=3600):
+    model = cp_model.CpModel()
+    m = n - k
+
+    # Error variables e_{j,c}
+    e_vars = {}
+    for j in range(1, n + 1):
+        for c in range(1, Z):
+            e_vars[(j, c)] = model.NewBoolVar(f"e_{j}_{c}")
+
+    for j in range(1, n + 1):
+        for v in range(2, Z):
+            model.AddImplication(e_vars[(j, v)], e_vars[(j, v-1)])
+
+    # Build sets V and K
+    V, K = build_var_sets(H_transpose, s_transpose, n, k, w, Z)
+
+    # Auxiliary variables x_{i,l} (Binary representation of the quotient q)
+    x_vars_dict = {} 
+    for i in range(m):
+        v_max = max(K[i])
+        q_max = (v_max - int(s_transpose[i])) // Z
+        L_i = max(1, q_max.bit_length())
+        for l in range(L_i):
+            x_vars_dict[(i, l)] = model.NewBoolVar(f"x_{i}_{l}")
+
+    # For each equation E_i
+    for i in range(m):
+        v_max = max(K[i])
+        q_max = (v_max - int(s_transpose[i])) // Z
+        L_i = max(1, q_max.bit_length())
+        
+        lhs_terms = []
+
+        # Contribution of errors
+        for j_idx in V[i]:
+            H_ij = 1 if j_idx <= m else int(H_transpose[i][j_idx - m - 1])
+            if H_ij != 0:
+                for c in range(1, Z):
+                    lhs_terms.append(e_vars[(j_idx, c)] * H_ij)
+
+        # Contribution of the bits of the quotient
+        for l in range(L_i):
+            xv = x_vars_dict[(i, l)]
+            lhs_terms.append(xv.Not() * (Z * (2**l)))
+
+        rhs = int(s_transpose[i]) + Z * (2**L_i - 1)
+        model.Add(sum(lhs_terms) == rhs)
+
+    # Hamming weight constraint
+    model.Add(sum(e_vars[(j, 1)] for j in range(1, n + 1)) >= w)
+
+    # Resolution
+    solver = cp_model.CpSolver()
+    solver.parameters.max_time_in_seconds = timeout
+    
+    start_time = time.time()
+    status = solver.Solve(model)
+    res_time = time.time() - start_time
+
+    solution = None
+    if status in (cp_model.FEASIBLE, cp_model.OPTIMAL):
+        status_str = 'sat'
+        sol_list = [sum(solver.Value(e_vars[(j, c)]) for c in range(1, Z)) for j in range(1, n+1)]
+        solution = ''.join(map(str, sol_list))
+    else:
+        status_str = 'unsat' if status == cp_model.INFEASIBLE else 'timeout'
+
+    return status_str, f"{res_time:.5f}", solution
+
+
+def build_and_solve_CP3_Exhaustive(n, w, k, H_transpose, s_transpose, Z=3, timeout=3600):
     model = cp_model.CpModel()
     m = n - k
 
@@ -265,7 +336,7 @@ def build_and_solve_CP3(n, w, k, H_transpose, s_transpose, Z=3, forward=False, b
     return status_str, f"{res_time:.5f}", solution
 
 
-def build_and_solve_CP4(n, w, k, H_transpose, s_transpose, Z=3, forward=False, backward=False, timeout=3600):
+def build_and_solve_CP3_Compact(n, w, k, H_transpose, s_transpose, Z=3, timeout=3600):
     model = cp_model.CpModel()
     m = n - k
 
@@ -331,45 +402,43 @@ def build_and_solve_CP4(n, w, k, H_transpose, s_transpose, Z=3, forward=False, b
             block_pmax = sorted(pmax.keys(), reverse=True)
 
             # Implication 
-            if backward:
-                for idx, j in enumerate(block_pmax):
-                    p_j = pmax[j]
-                    if idx == 0:
-                        for k in range(j, L_i):
+            for idx, j in enumerate(block_pmax):
+                p_j = pmax[j]
+                if idx == 0:
+                    for k in range(j, L_i):
+                        model.AddImplication(p_j, x_vars_dict[(i, k)])
+                else:
+                    j_prime = block_pmax[idx - 1]
+                    model.AddImplication(p_j, pmax[j_prime])
+                    for k in range(j, j_prime):
+                        if bits_max[k] == 1:
                             model.AddImplication(p_j, x_vars_dict[(i, k)])
-                    else:
-                        j_prime = block_pmax[idx - 1]
-                        model.AddImplication(p_j, pmax[j_prime])
-                        for k in range(j, j_prime):
-                            if bits_max[k] == 1:
-                                model.AddImplication(p_j, x_vars_dict[(i, k)])
-                            else:
-                                model.AddImplication(p_j, x_vars_dict[(i, k)].Not())
+                        else:
+                            model.AddImplication(p_j, x_vars_dict[(i, k)].Not())
 
             # Forward clause
-            if forward:
-                for idx, j in enumerate(block_pmax):
-                    p_j = pmax[j]
-                    if idx == 0:
-                        clause = [p_j]
-                        for k in range(j, L_i):
-                            xk = x_vars_dict[(i, k)]
-                            if bits_max[k] == 1:
-                                clause.append(xk.Not())
-                            else:
-                                clause.append(xk)
-                        model.AddBoolOr(clause)
-                    else:
-                        j_prime = block_pmax[idx - 1]
-                        clause = [p_j, pmax[j_prime].Not()]
+            for idx, j in enumerate(block_pmax):
+                p_j = pmax[j]
+                if idx == 0:
+                    clause = [p_j]
+                    for k in range(j, L_i):
+                        xk = x_vars_dict[(i, k)]
+                        if bits_max[k] == 1:
+                            clause.append(xk.Not())
+                        else:
+                            clause.append(xk)
+                    model.AddBoolOr(clause)
+                else:
+                    j_prime = block_pmax[idx - 1]
+                    clause = [p_j, pmax[j_prime].Not()]
 
-                        for k in range(j, j_prime):
-                            xk = x_vars_dict[(i, k)]
-                            if bits_max[k] == 1:
-                                clause.append(xk.Not())
-                            else:
-                                clause.append(xk)
-                        model.AddBoolOr(clause)
+                    for k in range(j, j_prime):
+                        xk = x_vars_dict[(i, k)]
+                        if bits_max[k] == 1:
+                            clause.append(xk.Not())
+                        else:
+                            clause.append(xk)
+                    model.AddBoolOr(clause)
 
             # Elimination of forbidden values between blocks
             for idx, j in enumerate(block_pmax):
@@ -402,46 +471,44 @@ def build_and_solve_CP4(n, w, k, H_transpose, s_transpose, Z=3, forward=False, b
             
             block_pmin = sorted(pmin.keys(), reverse=True)
 
-            if backward:
-                for idx, j in enumerate(block_pmin):
-                    p_j = pmin[j]
-                    if idx == 0:
-                        for k in range(j, L_i):
-                            if bits_min[k] == 0:
-                                model.AddImplication(p_j, x_vars_dict[(i, k)].Not())
-                            else:
-                                model.AddImplication(p_j, x_vars_dict[(i, k)])
-                    else:
-                        j_prime = block_pmin[idx - 1]
-                        model.AddImplication(p_j, pmin[j_prime])
-                        for k in range(j, j_prime):
-                            if bits_min[k] == 0:
-                                model.AddImplication(p_j, x_vars_dict[(i, k)].Not())
-                            else:
-                                model.AddImplication(p_j, x_vars_dict[(i, k)])
+            for idx, j in enumerate(block_pmin):
+                p_j = pmin[j]
+                if idx == 0:
+                    for k in range(j, L_i):
+                        if bits_min[k] == 0:
+                            model.AddImplication(p_j, x_vars_dict[(i, k)].Not())
+                        else:
+                            model.AddImplication(p_j, x_vars_dict[(i, k)])
+                else:
+                    j_prime = block_pmin[idx - 1]
+                    model.AddImplication(p_j, pmin[j_prime])
+                    for k in range(j, j_prime):
+                        if bits_min[k] == 0:
+                            model.AddImplication(p_j, x_vars_dict[(i, k)].Not())
+                        else:
+                            model.AddImplication(p_j, x_vars_dict[(i, k)])
 
-            if forward:
-                for idx, j in enumerate(block_pmin):
-                    p_j = pmin[j]
-                    if idx == 0:
-                        clause = [p_j]
-                        for k in range(j, L_i):
-                            xk = x_vars_dict[(i, k)]
-                            if bits_min[k] == 0:
-                                clause.append(xk)
-                            else:
-                                clause.append(xk.Not())
-                        model.AddBoolOr(clause)
-                    else:
-                        j_prime = block_pmin[idx - 1]
-                        clause = [p_j, pmin[j_prime].Not()]
-                        for k in range(j, j_prime):
-                            xk = x_vars_dict[(i, k)]
-                            if bits_min[k] == 0:
-                                clause.append(xk)
-                            else:
-                                clause.append(xk.Not())
-                        model.AddBoolOr(clause)
+            for idx, j in enumerate(block_pmin):
+                p_j = pmin[j]
+                if idx == 0:
+                    clause = [p_j]
+                    for k in range(j, L_i):
+                        xk = x_vars_dict[(i, k)]
+                        if bits_min[k] == 0:
+                            clause.append(xk)
+                        else:
+                            clause.append(xk.Not())
+                    model.AddBoolOr(clause)
+                else:
+                    j_prime = block_pmin[idx - 1]
+                    clause = [p_j, pmin[j_prime].Not()]
+                    for k in range(j, j_prime):
+                        xk = x_vars_dict[(i, k)]
+                        if bits_min[k] == 0:
+                            clause.append(xk)
+                        else:
+                            clause.append(xk.Not())
+                    model.AddBoolOr(clause)
 
             for idx, j in enumerate(block_pmin):
                 p_j = pmin[j]
@@ -486,117 +553,95 @@ def build_and_solve_CP4(n, w, k, H_transpose, s_transpose, Z=3, forward=False, b
     return status_str, f"{res_time:.5f}", solution
 
 
-def process_file(file_path, solve_function, forward=False, backward=True):
+def process_file(file_path, solve_function):
     """
     Process a single input file and solve the syndrome decoding problem.
 
     Args:
         file_path (str): Path to the input file containing problem parameters.
-        solve_function (function): Function to solve the problem.
-        forward (bool): Use forward filtering.
-        backward (bool): Use backward filtering.
+        solve_function (function): Function to solve the problem using CP-SAT.
     
     Returns:
         tuple: (file, status, res_time, sol)
     """
 
-    # Parse the input file
+    # Parse the input file to extract parameters (n, seed, weight, etc.)
     n, seed, w, k, H_transpose, s_transpose = parse_input_file(file_path)
     
+    # Execute the selected solve function
+    # Note: forward/backward flags removed to match the new builder signatures
     status, res_time, sol = solve_function(
         n, w, k,
         H_transpose,
         s_transpose,
-        Z=3,
-        forward=forward,
-        backward=backward
+        Z=3
     )
     
     file = os.path.basename(file_path)
 
-    # Verification
+    # Verify the solution if the solver returned 'sat'
     if status == 'sat' and sol is not None:
         is_valid = verify_sol(file_path, sol)
         if is_valid: 
             return file, status, res_time, sol
         else:
+            # If the solver provides a solution that doesn't match the syndrome
             return file, status, res_time, "Invalid solution"
     else:
+        # For 'unsat', 'timeout', or error cases
         return file, status, res_time, "No solution"
-
 
 
 def main():
     # Method dictionary configuration
+    # Mapping keys to their respective CP-SAT builder functions
     methods = {
-        'CNF1': build_and_solve_CP1,
-        'CNF2': build_and_solve_CP2,
-        'CNF3': build_and_solve_CP3,
-        'CNF4': build_and_solve_CP4
+        "CNF1": build_and_solve_CP1,
+        "CNF2": build_and_solve_CP2,
+        "CNF3": build_and_solve_CP3,
+        "CNF3_E": build_and_solve_CP3_Exhaustive,
+        "CNF3_C": build_and_solve_CP3_Compact
     }
 
-    # Configuring the parser argument
-    parser = argparse.ArgumentParser(description="CPSAT solver for syndrome decoding.")
+    # Configuring the argument parser
+    parser = argparse.ArgumentParser(description="CP-SAT solver for syndrome decoding.")
     parser.add_argument('-m', '--method', choices=methods.keys(), required=True, 
-                        help="Resolution method to use (CNF1, CNF2, CNF3 or CNF4)")
+                        help="Resolution method to use (CNF1, CNF2, CNF3, CNF3_E, or CNF3_C)")
     
-    parser.add_argument(
-        "--forward",
-        action="store_true",
-        help="Use forward implication only"
-    )
-
-    parser.add_argument(
-        "--backward",
-        action="store_true",
-        help="Use backward implication"
-    )
-    
+    # Input selection: process a single file or a whole directory
     group = parser.add_mutually_exclusive_group(required=True)
     group.add_argument('-f', '--file', help='Path to an input file')
     group.add_argument('-d', '--dir', help='Path to a directory to process')
     args = parser.parse_args()
 
-    forward = args.forward
-    backward = args.backward
-
-    # Determine suffix for CNF4
-    suffix = ""
-    if args.method == "CNF4":
-        if forward and backward:
-            suffix = "_equiv"
-        elif forward:
-            suffix = "_forward"
-        elif backward:
-            suffix = "_backward"
-        else:
-            suffix = "_none"
-
-    # Selecting the resolution function
+    # Selecting the resolution function based on the requested method
     solve_function = methods[args.method]
 
     if args.file:
         # Processing a single file
-        file, status, res_time, sol = process_file(args.file, solve_function, forward=forward, backward=backward)
+        file, status, res_time, sol = process_file(args.file, solve_function)
         directory = os.path.dirname(args.file)
-        csv_filepath = os.path.join(directory, f"CPSAT_{args.method}{suffix}_{os.path.splitext(file)[0]}.csv")
+        
+        # CSV output naming convention
+        csv_filepath = os.path.join(directory, f"CPSAT_{args.method}_{os.path.splitext(file)[0]}.csv")
         
         with open(csv_filepath, mode='w', newline='') as csvfile:
             csv_writer = csv.writer(csvfile)
             csv_writer.writerow(["File", "Result", "Time (s)", "Solution"])
             csv_writer.writerow([file, status, res_time, sol])
             csvfile.flush()
+            
     else:
-        # Processing a complete directory
-        csv_filepath = os.path.join(args.dir, f"CPSAT_{args.method}{suffix}.csv")
+        # -Processing a complete directory 
+        csv_filepath = os.path.join(args.dir, f"CPSAT_{args.method}.csv")
         
-        # Open the CSV file in append mode (in case you need to restart) or write mode.
+        # Open the CSV file in write mode
         with open(csv_filepath, mode='w', newline='') as csvfile:
             csv_writer = csv.writer(csvfile)
             csv_writer.writerow(["File", "Result", "Time (s)", "Solution"])
             csvfile.flush()
 
-            # List and filter instance files
+            # List and filter instance files within the directory
             all_files = os.listdir(args.dir)
             entries = [
                 f for f in all_files 
@@ -605,7 +650,7 @@ def main():
                 and not f.endswith(".csv")
             ]
             
-            # Sort
+            # Sort files numerically based on the value of 'n'
             entries.sort(key=extract_LW_n)
 
             if not entries:
@@ -614,23 +659,23 @@ def main():
 
             print(f"Starting to process {len(entries)} files in ascending order of n.")
 
-            # Processing loop
+            # Processing loop for the directory
             for entry in entries:
                 path = os.path.join(args.dir, entry)
                 n_val = extract_LW_n(entry)
                 
-                print(f"\n[n={n_val}] Treatment of: {entry} ...")
+                print(f"\n[n={n_val}] Processing: {entry} ...")
                 
                 # Running the selected CP-SAT solver
-                file_name, status, res_time, sol = process_file(path, solve_function, forward=forward, backward=backward)
+                file_name, status, res_time, sol = process_file(path, solve_function)
                 
-                # Immediate writing to the CSV (safety in case of crash)
+                # Immediate writing to the CSV for data safety
                 csv_writer.writerow([file_name, status, res_time, sol])
                 csvfile.flush()
                 
                 print(f"Completed: {status} in {res_time}s")
 
-    print(f"\nAll files have been processed. Results: {csv_filepath}")
+    print(f"\nProcessing finished. Results saved in: {csv_filepath}")
 
 
 if __name__ == "__main__":

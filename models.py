@@ -1,79 +1,76 @@
 import sys
-from pysat.card import CardEnc
-from pysat.pb import PBEnc
 from pysat.formula import CNF
 from utils import *
 
-from LW3SD_CNF import build_CNF1, build_CNF2, build_CNF3, build_CNF4, build_CNF5
-
+# Import the specific encoding builders defined in LW3SD_CNF.py
+from LW3SD_CNF import (
+    build_CNF1, 
+    build_CNF2, 
+    build_CNF3, 
+    build_CNF3_Exhaustive, 
+    build_CNF3_Compact
+)
 
 def main():
-    if len(sys.argv) < 7:
-        print("Usage: python3 models.py <variant: CNF1 | CNF2 | CNF3 | CNF4 | CNF5> <chemin_instance> <cc_encoding> <pb_encoding> <forward:0|1> <backward:0|1>")
-        print(print("Example: python3 models.py CNF4 Challenges/LargeWeight/LargeWeight_10_0 3 5 1 1"))
+    # Map command-line arguments to the corresponding builder functions
+    # CNF3_E and CNF3_C are used as convenient aliases for filtering variants
+    variants = {
+        "CNF1": build_CNF1,
+        "CNF2": build_CNF2,
+        "CNF3": build_CNF3,
+        "CNF3_E": build_CNF3_Exhaustive,
+        "CNF3_C": build_CNF3_Compact
+    }
+
+    if len(sys.argv) < 5:
+        print("Usage: python3 models.py <variant> <instance_path> <cc_encoding> <pb_encoding>")
+        print("Variants: CNF1, CNF2, CNF3, CNF3_E, CNF3_C")
+        print("Example: python3 models.py CNF3_C Challenges/LargeWeight/LargeWeight_10_0 3 5")
         sys.exit(1)
 
-    variant = sys.argv[1]
+    variant_key = sys.argv[1]
     input_file = sys.argv[2]
     cc_encoding = int(sys.argv[3])
     pb_encoding = int(sys.argv[4])
-    forward = bool(int(sys.argv[5]))
-    backward = bool(int(sys.argv[6]))
-    suffix = ""
-    if variant == "CNF4":
-        if forward and backward:
-            suffix = "_equiv"
-        elif forward:
-            suffix = "_forward"
-        elif backward:
-            suffix = "_backward"
-        else:
-            suffix = "_none"
     Z = 3
 
-    # Parse instance
-    n, seed, w, k, H_transpose, s_transpose = parse_input_file(input_file)
-
-    if variant == "CNF1":
-        cnf = build_CNF1(n, w, k, H_transpose, s_transpose, cc_encoding, pb_encoding, Z)
-
-    elif variant == "CNF2":
-        cnf = build_CNF2(n, w, k, H_transpose, s_transpose, cc_encoding, pb_encoding, Z)
-
-    elif variant == "CNF3":
-        cnf = build_CNF3(n, w, k, H_transpose, s_transpose, cc_encoding, pb_encoding, Z)
-
-    elif variant == "CNF4":
-        cnf = build_CNF4(
-            n, w, k,
-            H_transpose,
-            s_transpose,
-            cc_encoding,
-            pb_encoding,
-            forward,
-            backward,
-            Z
-        )
-
-    elif variant == "CNF5":
-        cnf = build_CNF5(n, w, k, H_transpose, s_transpose, cc_encoding, pb_encoding, Z)
-
-    else:
-        print("Variant must be CNF1, CNF2, CNF3, CNF4 or CNF5")
+    # Check if the requested variant is supported
+    if variant_key not in variants:
+        print(f"Error: Variant '{variant_key}' is unknown.")
+        print(f"Supported variants: {', '.join(variants.keys())}")
         sys.exit(1)
 
-    print(f"{variant} build : {len(cnf.clauses)} clauses, {cnf.nv} variables")
+    # Parse the input instance file
+    try:
+        n, seed, w, k, H_transpose, s_transpose = parse_input_file(input_file)
+    except Exception as e:
+        print(f"Error parsing file {input_file}: {e}")
+        sys.exit(1)
 
-    variant_name = variant + suffix
+    # Select the appropriate builder function
+    build_func = variants[variant_key]
+    
+    # Generate the CNF formula
+    cnf = build_func(
+        n, w, k, 
+        H_transpose, 
+        s_transpose, 
+        cc_encoding, 
+        pb_encoding, 
+        Z
+    )
+
+    print(f"[{variant_key}] build complete: {len(cnf.clauses)} clauses, {cnf.nv} variables")
+
+    # Save the generated CNF to a file using the variant name
     write_cnf_to_file(
         input_file,
         cc_encoding,
         pb_encoding,
         cnf,
         seed,
-        variant_name
+        variant_key
     )
-
 
 if __name__ == "__main__":
     main()
