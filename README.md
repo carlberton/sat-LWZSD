@@ -44,3 +44,10 @@ python3 models.py <variant> <instance_file> <card_enc> <pb_enc> <forward:0|1> <e
 ```bash
 python3 LW3SD_CPSAT.py -m <variant> -f <instance_file>
 ```
+
+---
+
+## References 
+
+* **Carl Berton, Sami Cherif, and Claire Delaplace.** [*Satisfiability for Large Weight Syndrome Decoding.*](https://doi.org/10.4230/LIPIcs.CP.2026.5) In 32nd International Conference on Principles and Practice of Constraint Programming (CP 2026), Lisbon, Portugal.
+* **Carl Berton, Sami Cherif, and Claire Delaplace.** [*Satisfiabilité pour le problème du décodage par syndrome à poids élevé.*](https://hal.science/hal-05625684v1) In Conférence Nationale en Intelligence Artificielle (CNIA 2026), Arras, France.
